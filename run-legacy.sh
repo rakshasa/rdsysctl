@@ -51,7 +51,7 @@ wait_state_change() {
   while true; do
     local current_state="$(cat ./state)"
 
-    if [[ "${current_state}" =~ ${to_state} ]]; then
+    if [[ "${current_state}" =~ ^(${to_state})$ ]]; then
       set -x
       return
     fi
@@ -92,3 +92,12 @@ echo "deploy" > "${work_dir}/run/current/nodes/${node_name}/signal"
 wait_state_change "${node_name}" "staging" "running"
 
 echo "${node_name}: state running"
+
+sleep 2
+
+docker stop "${name_prefix}-${node_name}"
+
+# TODO: Separate error handling and clean exits.
+wait_state_change "${node_name}" "running" "exited|error"
+
+echo "${node_name}: state $(cat "${work_dir}/run/current/nodes/${node_name}/state")"

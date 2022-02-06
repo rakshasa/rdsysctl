@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -eux
 
 echo "staging" > "/run/self/state"
 
@@ -36,12 +36,37 @@ echo "running" > "/run/self/state"
 mkdir -p "/run/self/logs"
 
 run_command() {
+  unset run_child_pid
+  unset run_kill_needed
+
+  trap '
+    if [[ -n "${run_child_pid}" ]]; then
+      kill -TERM "${run_child_pid}" 2> /dev/null
+    else
+      run_kill_needed="yes"
+    fi
+  ' SIGTERM SIGINT
+
   if [[ -n "${RUN_COMMAND}" ]]; then
-    eval ${RUN_COMMAND}
+    eval "${RUN_COMMAND} &"
+    run_child_pid=$!
   else
     # TODO: Rename.
-    /run/self/run
+    /run/self/run &
+    run_child_pid=$!
   fi
+
+  ( # Wait an extra time as trap can return before the child process exits.
+    if [[ "${term_kill_needed}" == "yes" ]]; then
+      kill -TERM "${term_child_pid}"
+    fi
+
+    wait ${term_child_pid}
+    trap - SIGTERM SIGINT
+    wait ${term_child_pid}
+  ) 2>/dev/null
+
+  return 0
 }
 
 if ! (run_command &> "/run/self/logs/entrypoint.log"); then
